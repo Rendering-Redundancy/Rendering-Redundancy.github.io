@@ -4,15 +4,23 @@
     <title>A Study on Pipeline Rendering Delay</title>
     <link rel="shortcut icon" href="icon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        p {
+            text-align: justify;
+        }
+    </style>
 </head>
 
 <body style="font-family: Arial, Helvetica, sans-serif;">
     <div style="width: 1000px; margin: auto;">
         <div style="margin-top: 40px; margin-bottom: 20px;">
             <h1 style="text-align: center;">Pipeline Rendering Delay</h1>
+
             <p>Pipeline Rendering Delay (PRD) refers to the delay between a content change in a web page, and its relative frame update on the screen. Unlike Page Load Time (PLT), Above-the-Fold Time (<a href="https://www.globaldots.com/blog/fold-time">AFT</a>) and First Contentful Paint (<a href="https://web.dev/first-contentful-paint/">FCP</a>), PRD is a frame-level metric (each frame updating process has a relative PRD value.)</p>
+
             <p>PRD measures how quickly the browser delivers DOM changes in the web page to the display. It does not  know if one frame update causes visual changes to the viewport, nor if the web page is interactive. After all, there is no easy way to acquire the result of rendering except capturing the loading process as a video, which, however, is not always capable of indicating when a web page is rendered, if no visual changes are present. It is also difficult to measure if a web page is interactive, in the sense of JavaScript event handlers being parsed and loaded, as it requries us to inject additional JavaScript codes and modify the prototype of event handles to capture the time points of those codes being executed.</p>
-            <p>The proposal of PRD is based on a idea that visual changes and functional readiness are both perceivable with rendering. For example, a user would not know if an image in the web page is fetched and load, if the browser does not render the web page with this image. A user would also not know if a button is clickable, if the button does not show a highlight border when mouse moves over, which is also the result of rendering. Therefore, no matter what our interests on the performance of web pages are (loading performance, JavaScript performance, animation performance, etc.), the rendering process is always the last step to visualize these functionabilities.</p>
+
+            <p>The proposal of PRD is based on a idea that visual changes and functional readiness are both perceivable with rendering. For example, a user would not know if an image in the web page is fetched and loaded, if the browser does not render the web page with this image. A user would also not know if a button is clickable, if the button does not show a highlight border when mouse moves over, which is also the result of rendering. Therefore, no matter what our interests on the performance of web pages are (loading performance, JavaScript performance, animation performance, etc.), the rendering process is always the last step to visualize these functionabilities. No prior metrics including Speed Index (<a href="https://web.dev/speed-index/">SI</a>), Time To Interactive(<a href="https://web.dev/interactive/">TTI</a>), and Ready Index (<a href="https://www.usenix.org/conference/nsdi18/presentation/netravali-vesper">RI</a>) consider performance issues from the perspective of rendering. Thus we deem it necessary to introduce PRD to reconsider the reality of web developing.</p>
         </div>
     </div>
 </body>
