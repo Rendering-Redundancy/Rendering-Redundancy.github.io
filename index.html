@@ -5,16 +5,20 @@
     <link rel="shortcut icon" href="icon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+        }
         p {
             text-align: justify;
-            line-height: "1.5";
-            font-family: Georgia, 'Times New Roman', Times, serif;
+            line-height: 1.5;
+            font-size: 16px;
         }
-        h1 {
-            font-family: Arial, Helvetica, sans-serif;
+        ol {
+            line-height: 1.5;
         }
-        h3 {
-            font-family: Arial, Helvetica, sans-serif;
+        img {
+            display: block; 
+            margin: auto;
         }
     </style>
 </head>
@@ -24,16 +28,120 @@
         <div style="margin-top: 40px; margin-bottom: 20px;">
             <h1 style="text-align: center;">Pipeline Rendering Delay</h1>
 
-            <p>Pipeline Rendering Delay (PRD) refers to the delay between a content change in a web page, and its relative frame update on the screen. Unlike Page Load Time (PLT), Above-the-Fold Time (<a href="https://www.globaldots.com/blog/fold-time">AFT</a>) and First Contentful Paint (<a href="https://web.dev/first-contentful-paint/">FCP</a>), PRD is a frame-level metric (each frame updating process has a relative PRD value.)</p>
-
-            <p>PRD measures how quickly the browser delivers DOM changes in the web page to the display. It does not  know if one frame update causes visual changes to the viewport, nor if the web page is interactive. After all, there is no easy way to acquire the result of rendering except capturing the loading process as a video, which, however, is not always capable of indicating when a web page is rendered, if no visual changes are present. It is also difficult to measure if a web page is interactive, in the sense of JavaScript event handlers being parsed and loaded, as it requries us to inject additional JavaScript codes and modify the prototype of event handles to capture the time points of those codes being executed.</p>
+            <p>Pipeline Rendering Delay (PRD) refers to the delay between a content change in a web page, and its relative frame update on the screen. Unlike Page Load Time (PLT), Above-the-Fold Time (<a href="https://www.globaldots.com/blog/fold-time">AFT</a>) and First Contentful Paint (<a href="https://web.dev/first-contentful-paint/">FCP</a>), PRD is a frame-level metric (each frame updating process has a relative PRD value.) PRD measures how quickly the browser delivers DOM changes in the web page to the display. It does not  know if one frame update causes visual changes to the viewport, nor if the web page is interactive. After all, there is no easy way to acquire the result of rendering except capturing the loading process as a video, which, however, is not always capable of indicating when a web page is rendered, if no visual changes are present. It is also difficult to measure if a web page is interactive, in the sense of JavaScript event handlers being parsed and loaded, as it requries us to inject additional JavaScript codes and modify the prototype of event handles to capture the time points of those codes being executed.</p>
 
             <p>The proposal of PRD is based on an idea that visual changes and functional readiness are both perceivable with rendering. For example, a user would not know if an image in the web page is fetched and loaded, if the browser does not render the web page with this image. A user would also not know if a button is clickable, if the button does not show a highlight border when mouse moves over, which is also the result of rendering. Therefore, no matter what our interests on the performance of web pages are (loading performance, JavaScript performance, animation performance, etc.), the rendering process is always the last step to visualize these functionabilities. No prior metrics including Speed Index (<a href="https://web.dev/speed-index/">SI</a>), Time To Interactive(<a href="https://web.dev/interactive/">TTI</a>), and Ready Index (<a href="https://www.usenix.org/conference/nsdi18/presentation/netravali-vesper">RI</a>) consider performance issues from the perspective of rendering. Thus we deem it necessary to introduce PRD to reconsider the reality of web developing.</p>
         </div>
 
         <div>
-            <h3>Prerequisite</h3>
-            <p></p>
+            <h2>Prerequisite</h2>
+
+            <p>To understand PRD, we must first take a lood at the rendering process of browsers. Take Chrome as an example, its rendering process is shown in the image below. This process can be categorized in 6 parts:</p>
+
+            <ol>
+                <li>HTML parsing. The browser parses the HTML document that is fetched from the Internet, and transforms it into a <em>DOM tree</em>.</li>
+                <li>Style calculation. The browser calculates the <em>display styles</em> of elements based on the DOM tree structure and the specifications in CSS files.</li>
+                <li>Layout determining. The browser transforms the DOM tree into a <em>layout tree</em>, and determines the <em>geographical attributes</em> (sizes and coordinates) of visible elements.</li>
+                <li>Paint. The browser produces a list of <em>paint records</em> that represents the visible contents in the web page. These paint records are later used in frame generation.</li>
+                <li>Layer managing. The browser maintains the layer relationships in the web page with a layer tree.</li>
+                <li>Frame generation. The browser actually generates a graphical frame based on the paint records and layer relationships.</li>
+            </ol>
+
+            <div style="width: 1000px;">
+                <img src="chrome_rendering_proc.png" alt="The rendering process of Chrome" style="width: 900px;">
+            </div>
+
+            <p>The above descriptions on the rendering process is cited from Chrome's <a href="https://www.chromium.org/Home">official documentation</a>. Although each procedure is somewhat described and explained, readers may still doubt, for example, why layer managing is necessary in frame generation, since with paint records a grapihcal frame can be properly generated. Since this is the official documentation, and source code of Chrome is available, we leave the answers to interested readers, instead of explaining it here.</p>
+            <p>We do not question if Chrome is perfectly designed, and our interest is uncovering the possible performance issues resulted from such a design. To this end, we must first find a data source that is capable of providing the information we need. In previous studies, several methods are used to acquire such information, including video capturing, JavaScript APIs (<a href="https://developer.mozilla.org/en-US/docs/Web/API/PerformanceObserver">Performance Observer</a>, <a href="https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver">Mutation Observer</a>, etc.), Chrome Debugger Interface, and Chrome DevTools Protocol (<a href="https://chromedevtools.github.io/devtools-protocol/">CDP</a>). However, none of them includes the information of the rendering process, and finally, only with the <a href="https://www.chromium.org/developers/how-tos/trace-event-profiling-tool/trace-event-reading">tracing</a> functionality can we get what we are actually looking for. </p>
+
+            <p>By the way, as a clarification, the <a href="https://chromedevtools.github.io/devtools-protocol/tot/LayerTree/">LayerTree</a> domain in CDP does seem to have the information of the paint method, which can output a list of paint records. However, in a relatively small scaled study, we compared the similarity between consecutive paint records, and the result (the CDF of these similarity) in shown in the image below. We find out that the paint records do not really represent the operations in the relative frame generation procedure, instead, it's only the representation of the current viewport state. </p>
+
+            <div style="width: 1000px;">
+                <img src="rr.png" alt="False rendering redundancy" style="width: 400px;">
+            </div>
+            
+        </div>
+        <div>
+            <h2>Understanding Tracing Result</h2>
+
+            <p>Since we choose tracing as the data source in this study, we must first understand the result of tracing, and what we can extract from it. Although there are certain <a href="https://docs.google.com/document/d/1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU/preview">documentations</a> about tracing, the official <a href="https://chromedevtools.github.io/timeline-viewer/">visualization tool</a> is actually the most useful tool to learn from tracing. The result of tracing is a JSON file (we refer to as <em>trace</em>) that includes two primary attributes, traceEvents and metadata, as shown in the image below. In traceEvents are a list of browser-level event records at the granularity of microseconds. </p>
+
+            <div style="width: 1000px;">
+                <img src="trace format.png" alt="Trace format" style="width: 600px;">
+            </div>
+
+            <p>With simple preprocessing, we are able to transform this event list into an event tree, as shown in the image below, which is captured from official visualization tool. Obviously, now we know how the rendering process is conducted: it is not a single task that the browser handles, instead it consists of a series of tasks that are scattered not only in the main thread, but also the compositor thread and several tile worker threads. The process is not always consecutive, since the main thread merely handles tasks that are posted to its task queue by several concurrent threads or even processes. Therefore, the sequence of these tasks are not guaranteed.</p>
+
+            <div style="width: 1000px;">
+                <img src="trace result.png" alt="Trace result" style="width: 900px;">
+            </div>
+
+            <p>We are now aware that in the rendering process, procedure 1 corresponds to ParseHTML event, proc 2 ParseAuthorStyleSheet, proc 3 Layout and UpdateLayoutTree, proc 4 Paint, proc 5 UpdateLayer, UpdateLayerTree and CompositeLayers, and proc 6 is rather complicated, and is not processed in the main thread. Therefore, with reasons that we shall later discuss, we do not delve into the details of proc 6.</p>
+
+            <p>Most of the rendering process (we refer to as <em>rendering pipeline</em>) is in the main thread. Apart from the rendering process, the execution of JavaScript is another primary part in the main thread, which includes EvaluateScript and FunctionCall.</p>
+        </div>
+
+        <div>
+            <h2>Understanding Performance Issues</h2>
+
+            <p>Would this sophisticated rendering process cause performance problems to the browser? Under what circumstances would these problems be perceivable? And what are the underlying causes of these problems? To answer these questions, we must first have the tools to locate, study and optimize them.</p>
+
+            <h3>Pipeline Rendering Delay</h3>
+
+            <p>We first define Pipeline Rendering Delay as the duration between a content change in a web page, and its relative frame update on the screen. In a trace, content change is normally represented by ParseHTML event in the main thread, which not only means the parsing of the HTML document, but in general, means the maintaining of the DOM tree structure. While a frame update is represented by CommitFrame in the compositor thread. The following images demonstrate the definition and an example of PRD, relatively.</p>
+
+            <div style="width: 1000px;">
+                <img src="prd_definition.png" alt="The definition of Pipeline Rendering Delay" style="width: 700px;">
+                <p style="text-align: center; font-style: italic;">The definition of PRD in regard of Event Tree</p>
+            </div>
+            
+            <br>
+            <br>
+
+            <div style="width: 1000px;">
+                <img src="prd_example.png" alt="An example of Pipeline Rendering Delay" style="width: 500px;">
+                <p style="text-align: center; font-style: italic;">An example of PRD in the loading process of New York Times</p>
+            </div>
+
+            <br>
+
+            <p>We built a measurement system that captured thousands of Chrome traces using <a href="https://pptr.dev/">puppeteer</a> that mimics Chrome behaviors, and conducted multiple trace analysis to reveal performance issues and locate bottolnecks in the rendering process. We analyzed the composition of PRD in diffferent threads and different tasks, and the result is shown as follows, with the first image shows the proportion of total time consumption of different threads, the second image the total time consumption of different types of tasks in the rendering pipeline, and the third the proportion of tasks in the web pages. </p>
+
+            <div style="display: flex; justify-content: center;">
+                <img src="prd-threads.png" alt="" width="300px" style="margin: 0px;">
+                <img src="prd-tasks.png" alt="" width="300px" style="margin: 0px;">
+                <img src="prd-tasks-accum.png" alt="" width="300px" style="margin: 0px;">
+            </div>
+
+            <p>Obviously, layout task is basically as time consuming as JavaScript exeuction, which is irreplacable in the rendering process of web pages. We further use mathematical methods to find out the primary influencing factor to the time consumption of layout tasks. We first use <a href="https://www.jstor.org/stable/3701363?seq=1">Dominance Analysis</a> to determine the influence of a set of munally selected factors (including the quantity of DOM nodes, the quantity of text nodes, the quantity of image nodes and the quantity of CSS rules.) The result of dominance analysis, however, is unexpected, which implies that the quantity of CSS rules is the most influencing factor. According to our understanding on Chrome's implementation, we are not convinced by such a result, and therefore we adopt an automatic factor selecting multiple regression, that selects the best fitting factors according to the result of multiple regression equation.</p>
+        </div>
+
+        <div>
+            <h2>Optimization</h2>
+
+            <p>The result of multiple regression reveals that the contribution of each type of HTML element to the time consumption of layout task is differnt, however it's not practical those elements that have the greatest contribution. We propose two types of optimization techniques here.</p>
+
+            <ol>
+                <li>
+                    <p>Aggressive. The aggressive method reduces the time consumption of layout tasks by removing <b>visually similar</b> and <b>invisible</b> elements from the HTML document. The visual similarity is inferred from the class name attribute, as it indicates a list of pre-defined display styles. One type of visually similar elements is referred to as a cluster. We further adopt a progressive method that removes more elements in larger clusters compared to smaller clusters.</p>
+
+                    <div style="width: 900px;">
+                        <img src="lips.png" alt="" width="600px">
+                    </div>
+
+                    <p>Above image demonstrates the distribution of log value of the size of the greatest cluster as shown by the light aqua histogram, and the light blue curve the estimated normal distribution. Accoding to this distribution, we shrink the size of a cluster to 86 when it is greater than 86, 29 when it is between 29 to 86 (exclusive), and 10 when it is between 10 to 29 (exclusive). </p>
+                </li>
+
+                <li>
+                    <p>Conservative. The conservative method does not remove elements from the HTML document <em>for good</em>, instead it only appends those invisible elements after the web page is loaded. With such a manner, the layout tasks are further sliced, and those time-consuming tasks before load are no longer a problem to the loading performance.</p>
+                </li>
+            </ol>
+        </div>
+
+        <div>
+            <h2>Reference</h2>
+
+            <p>Source code and traces in this study are publically available at <a href="https://github.com/WillispYoung/WebStudy">Github</a>.</p>
         </div>
     </div>
 </body>
